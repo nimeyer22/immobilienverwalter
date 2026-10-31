@@ -1,4 +1,5 @@
-FROM python:3.12-slim
+# syntax=docker/dockerfile:1.7
+FROM python:3.12-slim-trixie@sha256:aa943ce411423c7582288f18707ff66eddcbaeb510502d747a72aeb34f30d159
 
 LABEL org.opencontainers.image.source="https://github.com/BitNike/immobilienverwalter"
 
@@ -14,7 +15,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN --mount=type=cache,target=/root/.cache/pip \
+    python -m pip install --upgrade pip==26.2.2 \
+    && pip install -r requirements.txt \
+    && pip check
 
 COPY app/ .
 RUN useradd --system --uid 1000 nk && mkdir -p /data /dokumente && chown nk /data /dokumente
@@ -24,5 +28,5 @@ VOLUME ["/data", "/dokumente"]
 EXPOSE 8080
 # Gesundheitscheck: Docker (und Dockge, Portainer …) zeigen „healthy“, solange App und Datenbank antworten
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-    CMD ["python", "-c", "import urllib.request, sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=4).status == 200 else 1)"]
-CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--workers", "1", "--threads", "4", "--timeout", "120", "main:app"]
+    CMD ["python", "-c", "import sys, urllib.request; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=4).status == 200 else 1)"]
+CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--workers", "1", "--threads", "4", "--timeout", "120", "--access-logfile", "-", "--error-logfile", "-", "main:app"]

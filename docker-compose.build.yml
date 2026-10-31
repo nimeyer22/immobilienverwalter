@@ -7,6 +7,9 @@ services:
     build: .
     container_name: immobilienverwalter
     restart: unless-stopped
+    init: true
+    security_opt:
+      - no-new-privileges:true
     env_file:
       - path: .env
         required: false
