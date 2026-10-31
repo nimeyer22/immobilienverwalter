@@ -40,7 +40,6 @@ app.config.update(
     PERMANENT_SESSION_LIFETIME=60 * 60 * 24 * 30,
 )
 app.teardown_appcontext(db.close_db)
-db.init_db()
 
 OHNE_ZUGANG = "ohne_zugang"
 ROLLEN = {
@@ -94,11 +93,24 @@ def einstellung_setzen(schluessel, wert):
 OFFEN = {"login", "login_zweifaktor", "einrichtung", "passwort_vergessen", "passwort_setzen", "static", "logo_datei"}
 
 
+@app.get("/live")
+def lebendig():
+    """Prozess-Liveness: absichtlich unabhängig von externen Diensten."""
+    return {"status": "ok", "version": VERSION}
+
+
+@app.get("/ready")
+def bereit():
+    """Readiness: nimmt erst Traffic an, wenn die Datenbank erreichbar und migriert ist."""
+    one("SELECT 1 AS ok")
+    db.assert_schema_current()
+    return {"status": "ok", "version": VERSION}
+
+
 @app.get("/health")
 def gesundheit():
-    """Für den Docker-Healthcheck: antwortet ohne Anmeldung, wenn App und Datenbank erreichbar sind."""
-    one("SELECT 1 AS ok")
-    return {"status": "ok", "version": VERSION}
+    """Kompatibilitätsalias für bestehende Installationen und Monitore."""
+    return bereit()
 
 
 # ---------- Schutz gegen untergeschobene Formulare (CSRF) ----------
@@ -142,7 +154,7 @@ def csrf_einsetzen(antwort):
 @app.before_request
 def anmeldung_pruefen():
     g.user = None
-    if request.endpoint in ("static", "gesundheit"):
+    if request.endpoint in ("static", "lebendig", "bereit", "gesundheit"):
         return None
     if not one("SELECT id FROM benutzer LIMIT 1"):
         return None if request.endpoint in ("einrichtung", "logo_datei") else redirect(url_for("einrichtung"))

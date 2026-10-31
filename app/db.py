@@ -425,3 +425,21 @@ def init_db():
         con.execute(f"PRAGMA user_version = {i}")
         con.commit()
     con.close()
+
+
+def schema_version(con=None):
+    """Gibt die installierte SQLite-Schemaversion zurück."""
+    own = con is None
+    con = con or verbinden()
+    try:
+        return con.execute("PRAGMA user_version").fetchone()[0]
+    finally:
+        if own:
+            con.close()
+
+
+def assert_schema_current():
+    """Readiness-Prüfung ohne Seiteneffekt; Migrationen werden hier nie ausgeführt."""
+    version = get_db().execute("PRAGMA user_version").fetchone()[0]
+    if version != len(MIGRATIONEN):
+        raise RuntimeError(f"Datenbankschema {version}, erwartet {len(MIGRATIONEN)}; zuerst Migration ausführen")

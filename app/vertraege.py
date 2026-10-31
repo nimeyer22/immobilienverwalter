@@ -1,10 +1,7 @@
 """Verträge je Immobilie oder Mietobjekt (Laufzeit, Kündigungsfrist, Preisgarantie, Tarif), Erinnerung per Mail.
 Die Berechnung des Kündigungstermins stammt aus der Vertragsübersicht (rechnung.termin)."""
 import calendar
-import logging
 import os
-import threading
-import time
 from datetime import date
 
 from flask import abort, flash, g, redirect, render_template, request, url_for
@@ -27,9 +24,6 @@ ARTEN = ["Strom (Allgemeinstrom)", "Gas", "Wasser / Abwasser", "Gebäudeversiche
 STATUS = {"laeuft": "läuft", "bald": "bald kündigen", "endet": "endet", "gekuendigt": "gekündigt", "beendet": "beendet",
           "unbekannt": "Daten fehlen"}
 MIETARTEN = {"": "ohne Anpassung", "staffel": "Staffelmiete", "index": "Indexmiete"}
-log = logging.getLogger(__name__)
-
-
 # ---------- Berechnung (wie in der Vertragsübersicht) ----------
 
 def plus_monate(d, n):
@@ -447,24 +441,6 @@ def pruefen(heute=None):
             tabelle, spalte, pid, wert = p["merker"]
             exe(f"UPDATE {tabelle} SET {spalte} = ? WHERE id = ?", (wert, pid))
     return len(gemeldet)
-
-
-def _schleife():
-    while True:
-        try:
-            with app.app_context():
-                n = pruefen(date.today())
-                if n:
-                    log.warning("Erinnerung für %d Termine gesendet", n)
-        except Exception:  # noqa: BLE001 – der Thread darf nicht sterben
-            log.exception("Erinnerung fehlgeschlagen")
-        time.sleep(6 * 3600)
-
-
-def starten():
-    """Hintergrund-Prüfung alle 6 Stunden (gunicorn läuft mit genau einem Worker). NK_ERINNERUNG=aus schaltet sie ab."""
-    if os.environ.get("NK_ERINNERUNG", "an") != "aus":
-        threading.Thread(target=_schleife, name="erinnerung", daemon=True).start()
 
 
 @app.route("/einstellungen/admin/erinnerungen", methods=["GET", "POST"])

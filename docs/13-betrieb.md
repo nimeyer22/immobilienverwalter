@@ -34,7 +34,13 @@ Neue Versionen ändern die Datenbank nur, indem sie Spalten oder Tabellen ergän
 
 ## Gesundheitscheck
 
-`/health` antwortet ohne Anmeldung mit der Version und prüft die Datenbank. Docker nutzt das für den Status „healthy“.
+`/live` antwortet ohne Anmeldung und ohne Datenbankzugriff. Docker nutzt diesen Endpunkt für den
+Container-Status „healthy“. `/ready` prüft zusätzlich Datenbankzugriff und Schemaversion; Kubernetes sollte
+diesen Endpunkt als Readiness-Probe verwenden. `/health` bleibt als kompatibler Alias für `/ready` erhalten.
+
+Schemaänderungen laufen nicht mehr beim Import der Web-App. Compose führt vor dem Web- und Scheduler-Container
+einmalig `python manage.py migrate` aus. Bei einer manuellen Installation muss dieser Befehl vor Gunicorn laufen.
+Erinnerungen laufen in Compose in einem eigenen Prozess; Web-Worker versenden niemals im Hintergrund E-Mails.
 
 ## E-Mail
 

@@ -4,6 +4,16 @@
 # Danach im Browser: http://<IP-des-Rechners>:8080
 
 services:
+  migrate:
+    image: ghcr.io/bitnike/immobilienverwalter:latest
+    command: ["python", "manage.py", "migrate"]
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      - daten:/data
+    restart: "no"
+
   immobilienverwalter:
     image: ghcr.io/bitnike/immobilienverwalter:latest
     container_name: immobilienverwalter
@@ -14,11 +24,30 @@ services:
     env_file:
       - path: .env
         required: false
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
     ports:
       - "${NK_PORT:-8080}:8080"
     volumes:
       - daten:/data
       - dokumente:/dokumente
+
+  erinnerungen:
+    image: ghcr.io/bitnike/immobilienverwalter:latest
+    command: ["python", "manage.py", "reminders-loop"]
+    restart: unless-stopped
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    env_file:
+      - path: .env
+        required: false
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    volumes:
+      - daten:/data
 
 volumes:
   daten:

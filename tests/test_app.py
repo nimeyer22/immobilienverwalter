@@ -12,6 +12,9 @@ os.environ["NK_ERINNERUNG"] = "aus"  # keine Hintergrund-Prüfung im Test
 os.environ["NK_CSRF"] = "aus"  # CSRF-Feld nur in test_csrf, sonst müsste jeder POST es mitschicken
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "app"))
 
+import db  # noqa: E402
+db.init_db()
+
 from PIL import Image  # noqa: E402
 from pypdf import PdfReader, PdfWriter  # noqa: E402
 
@@ -54,6 +57,8 @@ def test_gesamter_ablauf():
     c = app.test_client()
     assert c.get("/").headers["Location"].endswith("/einrichtung")
     assert ok(c.get("/health")).get_json()["status"] == "ok"  # Healthcheck ohne Anmeldung, auch vor der Einrichtung
+    assert ok(c.get("/live")).get_json()["status"] == "ok"
+    assert ok(c.get("/ready")).get_json()["status"] == "ok"
     post(c, "/einrichtung", data={"benutzername": "admin", "vorname": "Max", "name": "Vermieter",
                                     "passwort": "geheim123", "passwort2": "geheim123"})
     post(c, "/profil", data={"vorname": "Max", "name": "Vermieter", "strasse": "Musterweg", "hausnummer": "1",
