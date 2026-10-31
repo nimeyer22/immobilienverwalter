@@ -43,7 +43,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=security-${{ matrix.arch }}
 
       - name: Trivy-Bericht erstellen
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: immobilienverwalter:security-${{ matrix.arch }}
           format: json
@@ -51,7 +51,7 @@ jobs:
           exit-code: "0"
 
       - name: Critical-Findings mit Fix blockieren
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: immobilienverwalter:security-${{ matrix.arch }}
           format: table
