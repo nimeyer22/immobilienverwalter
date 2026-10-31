@@ -1,7 +1,7 @@
 name: Docker-Image
 
 # Bei jeder Version (Tag v…) baut GitHub das fertige Image für amd64 und arm64
-# und veröffentlicht es in der GitHub Container Registry: ghcr.io/bitnike/immobilienverwalter
+# und veröffentlicht es in der GitHub Container Registry: ghcr.io/nimeyer22/immobilienverwalter
 on:
   push:
     tags: ["v*"]
@@ -91,7 +91,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/bitnike/immobilienverwalter
+          images: ghcr.io/nimeyer22/immobilienverwalter
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}

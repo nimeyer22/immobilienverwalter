@@ -23,12 +23,12 @@ docker compose pull && docker compose up -d
 ```
 
 Neue Versionen ändern die Datenbank nur, indem sie Spalten oder Tabellen ergänzen. Die Änderungen stehen in den
-[Release-Notizen](https://github.com/BitNike/immobilienverwalter/releases).
+[Release-Notizen](https://github.com/nimeyer22/immobilienverwalter/releases).
 
 ## Rückweg auf eine ältere Version
 
 1. In der `docker-compose.yml` statt `latest` eine feste Version eintragen, z. B.
-   `image: ghcr.io/bitnike/immobilienverwalter:0.24.2`
+   `image: ghcr.io/nimeyer22/immobilienverwalter:0.24.2`
 2. `docker compose up -d`
 3. Steht in den Release-Notizen, dass der Rückweg nicht ohne Weiteres geht, vorher die Sicherung einspielen.
 

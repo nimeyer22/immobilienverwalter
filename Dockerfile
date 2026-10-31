@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7
 FROM python:3.12-slim-trixie@sha256:aa943ce411423c7582288f18707ff66eddcbaeb510502d747a72aeb34f30d159
 
-LABEL org.opencontainers.image.source="https://github.com/BitNike/immobilienverwalter"
+LABEL org.opencontainers.image.source="https://github.com/nimeyer22/immobilienverwalter"
 
 # Systembibliotheken für WeasyPrint (PDF) und klassische Schriften für die Abrechnung
 RUN apt-get update && apt-get install -y --no-install-recommends \

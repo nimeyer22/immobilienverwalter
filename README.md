@@ -1,14 +1,16 @@
 <p align="center"><img src="design/logo-readme.png" alt="Immobilienverwalter" width="480"></p>
 
 <p align="center">
-  <a href="https://github.com/BitNike/immobilienverwalter/actions/workflows/tests.yml"><img src="https://github.com/BitNike/immobilienverwalter/actions/workflows/tests.yml/badge.svg" alt="Tests"></a>
+  <a href="https://github.com/nimeyer22/immobilienverwalter/actions/workflows/tests.yml"><img src="https://github.com/nimeyer22/immobilienverwalter/actions/workflows/tests.yml/badge.svg" alt="Tests"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/Lizenz-AGPL--3.0-17325c" alt="Lizenz: AGPL-3.0"></a>
-  <a href="https://github.com/BitNike/immobilienverwalter/releases/latest"><img src="https://img.shields.io/github/v/release/BitNike/immobilienverwalter?label=Version" alt="Version"></a>
+  <a href="https://github.com/nimeyer22/immobilienverwalter/releases/latest"><img src="https://img.shields.io/github/v/release/nimeyer22/immobilienverwalter?label=Version" alt="Version"></a>
 </p>
 
 # Immobilienverwalter
 
 Web-App im Docker-Container für Vermieter: Immobilien, Mietobjekte, Mieter, Zähler, Belege und die jährliche Betriebskostenabrechnung (§ 556 BGB, § 2 BetrKV).
+
+Dieses Repository ist ein Fork des [Originalprojekts von BitNike](https://github.com/BitNike/immobilienverwalter). Vielen Dank an den ursprünglichen Entwickler für die Arbeit an der Software.
 
 📖 **[Handbuch](docs/README.md)**: Anleitung zu allen Funktionen, mit einem durchgerechneten WEG-Beispiel.
 
@@ -29,7 +31,7 @@ der [`docker-compose.yml`](docker-compose.yml) einfügen. Mehr braucht es nicht,
 Danach im Browser: `http://<IP-des-Rechners>:8080`. Der erste Zugang, der angelegt wird, ist Administrator.
 
 **Update:** `docker compose pull && docker compose up -d` – die Daten liegen in den Volumes und bleiben erhalten.
-Für eine feste Version statt `latest` z. B. `ghcr.io/bitnike/immobilienverwalter:0.27.0` eintragen.
+Für eine feste Version statt `latest` z. B. `ghcr.io/nimeyer22/immobilienverwalter:0.27.0` eintragen.
 
 E-Mail-Versand (Passwort vergessen, Einladungen, Erinnerungen) ist optional: Vorlage [`.env.example`](.env.example) als `.env`
 neben die Compose-Datei legen und ausfüllen.
@@ -37,7 +39,7 @@ neben die Compose-Datei legen und ausfüllen.
 ### Aus dem Quellcode (für Entwickler)
 
 ```bash
-git clone https://github.com/BitNike/immobilienverwalter.git
+git clone https://github.com/nimeyer22/immobilienverwalter.git
 cd immobilienverwalter
 docker compose -f docker-compose.build.yml up -d --build
 ```

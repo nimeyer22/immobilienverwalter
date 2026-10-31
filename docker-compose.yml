@@ -5,7 +5,7 @@
 
 services:
   immobilienverwalter:
-    image: ghcr.io/bitnike/immobilienverwalter:latest
+    image: ghcr.io/nimeyer22/immobilienverwalter:latest
     container_name: immobilienverwalter
     restart: unless-stopped
     init: true
