@@ -21,16 +21,36 @@ Migrationen gehören in einen einmaligen Release-Job vor das Deployment. Erinner
 der `python manage.py reminders` startet. Mehrere Scheduler dürfen erst aktiviert werden, wenn die geplante
 PostgreSQL-Claim-/Outbox-Sperre umgesetzt ist.
 
-## Noch nicht produktionsreif für PostgreSQL
+## Datenbankmodus wählen
 
-Der aktuelle Datenzugriff und die 22 Schemamigrationen sind weiterhin SQLite-spezifisch. `DATABASE_URL` wird
-deshalb bewusst noch nicht akzeptiert: Eine bloße DSN-Umschaltung würde unter anderem bei Platzhaltern,
-generierten IDs, Collations und Nullvergleichen fehlschlagen. Vor einem PostgreSQL-Rollout fehlen noch:
+Ohne `DATABASE_URL` verwendet die Anwendung weiterhin SQLite in `/data/nebenkosten.sqlite`. Das ist der
+unkomplizierte interne Modus für genau eine App-Instanz. Für PostgreSQL wird in `.env` beispielsweise gesetzt:
 
-1. PostgreSQL-native, versionierte Schema-Migrationen und eine Connection-/Transaktionsschicht.
-2. Die systematische Portierung aller Abfragen und ein Offline-Importer mit Sequenzabgleich und Validierung.
-3. Eine PostgreSQL-gestützte Claim-/Outbox-Logik für wiederholbare Reminder-Läufe.
-4. PostgreSQL-Integrationstests in CI sowie Tests mit Verbindungsverlust und parallelen Instanzen.
+```dotenv
+DATABASE_URL=postgresql://immobilienverwalter:passwort@db.example.de:5432/immobilienverwalter?sslmode=require
+SECRET_KEY=ein-langer-zufaelliger-und-in-allen-replikaten-identischer-wert
+```
+
+Dieselbe Compose-Datei reicht beide Werte aus dem bestehenden `env_file` an Migration, Web-App und Scheduler
+weiter. Der PostgreSQL-Server selbst bleibt bewusst extern; Compose provisioniert keine Produktionsdatenbank.
+Beim ersten Start legt der Dienst `migrate` das Schema an. Das App-Konto benötigt dafür DDL-Rechte. Für einen
+strengeren Produktionsbetrieb sollte ein separates Migrationskonto den Release-Job ausführen und das Web-Konto
+nur DML-Rechte besitzen.
+
+PostgreSQL-Migrationen verwenden eine Advisory Lock. Dadurch führen zwei versehentlich parallele Release-Jobs
+die Schemaänderungen nicht gleichzeitig aus. Ein Wechsel einer bereits gefüllten SQLite-Installation erfolgt
+noch nicht automatisch; bis zum SQLite-Importer muss PostgreSQL leer gestartet werden.
+
+## Noch offene Arbeiten
+
+Der Laufzeitpfad, die 22 Schemaänderungen, Bindings, generierten IDs, Nullvergleiche und case-insensitive
+Benutzernamen sind für PostgreSQL unterstützt. Vor einem vollständigen Produktions-Cutover fehlen noch:
+
+1. Ein Offline-Importer für bestehende SQLite-Daten mit Sequenzabgleich und Validierungsbericht.
+2. Eine PostgreSQL-gestützte Claim-/Outbox-Logik für wiederholbare Reminder-Läufe.
+3. Erweiterte PostgreSQL-Tests für Verbindungsverlust und parallele App-/Scheduler-Instanzen.
+4. Eine echte natürliche Sortierung; PostgreSQL sortiert die bisherigen `NATUERLICH`-Felder derzeit lexikalisch.
 5. RWX-Speicher oder Object Storage für Dokumente, Fotos und Logos.
 
-Bis dahin bleibt der Betrieb auf eine Web-Replik und gemeinsamen lokalen Speicher beschränkt.
+Mehrere Web-Replikate sind erst sinnvoll, wenn alle Replikate denselben Dokument-/Bildspeicher und dasselbe
+`SECRET_KEY` verwenden. Der Scheduler bleibt bis zur Claim-/Outbox-Umsetzung auf genau eine Instanz beschränkt.

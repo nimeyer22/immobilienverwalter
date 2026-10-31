@@ -6,6 +6,10 @@ from flask import g
 
 DATA_DIR = os.path.abspath(os.environ.get("NK_DATA", os.path.join(os.path.dirname(__file__), "..", "data")))
 DB_PATH = os.path.join(DATA_DIR, "nebenkosten.sqlite")
+DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
+POSTGRESQL = DATABASE_URL.startswith(("postgresql://", "postgres://"))
+if DATABASE_URL and not POSTGRESQL:
+    raise RuntimeError("DATABASE_URL unterstützt ausschließlich postgresql:// (leer lassen für SQLite)")
 
 # Jede Migration wird genau einmal ausgeführt (PRAGMA user_version).
 MIGRATIONEN = [
@@ -388,12 +392,74 @@ def _natuerlich(a, b):
     return (x > y) - (x < y)
 
 
-def verbinden(pfad=None):
+def _sqlite_verbinden(pfad=None):
     con = sqlite3.connect(pfad or DB_PATH)
     con.create_collation("NATUERLICH", _natuerlich)
     con.row_factory = sqlite3.Row
     con.execute("PRAGMA foreign_keys = ON")
+    con.execute("PRAGMA busy_timeout = 5000")
+    con.execute("PRAGMA journal_mode = WAL")
     return con
+
+
+def _postgres_sql(sql, named=False):
+    """Übersetzt die wenigen bewusst unterstützten SQLite-Ausdrücke im Anwendungs-SQL."""
+    sql = re.sub(r"([\w.]+)\s*=\s*\?\s+COLLATE\s+NOCASE", r"LOWER(\1) = LOWER(?)", sql,
+                 flags=re.IGNORECASE)
+    sql = re.sub(r"\s+COLLATE\s+(?:NATUERLICH|NOCASE)\b", "", sql, flags=re.IGNORECASE)
+    sql = re.sub(r"\bIS\s+NOT\s+\?", "IS DISTINCT FROM ?", sql, flags=re.IGNORECASE)
+    sql = re.sub(r"\bIS\s+\?", "IS NOT DISTINCT FROM ?", sql, flags=re.IGNORECASE)
+    if named:
+        return re.sub(r":([A-Za-z_][A-Za-z0-9_]*)", r"%(\1)s", sql)
+    return sql.replace("?", "%s")
+
+
+def _postgres_migration_sql(sql):
+    sql = sql.replace("benutzername TEXT NOT NULL UNIQUE COLLATE NOCASE", "benutzername TEXT NOT NULL")
+    sql = re.sub(r"\bINTEGER PRIMARY KEY\b", "BIGSERIAL PRIMARY KEY", sql, flags=re.IGNORECASE)
+    sql = sql.replace("TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP", "TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP::text)")
+    return re.sub(r"\s+COLLATE\s+(?:NATUERLICH|NOCASE)\b", "", sql, flags=re.IGNORECASE)
+
+
+class PostgresConnection:
+    """Kleine DB-API-Fassade, damit der bestehende Query-Layer schrittweise portiert werden kann."""
+
+    def __init__(self):
+        try:
+            import psycopg
+            from psycopg.rows import dict_row
+        except ImportError as exc:
+            raise RuntimeError("Für DATABASE_URL muss psycopg installiert sein") from exc
+        self._con = psycopg.connect(DATABASE_URL, row_factory=dict_row,
+                                    connect_timeout=int(os.environ.get("DB_CONNECT_TIMEOUT", "5")))
+
+    def execute(self, sql, args=()):
+        return self._con.execute(_postgres_sql(sql, named=isinstance(args, dict)), args)
+
+    def executemany(self, sql, args):
+        cursor = self._con.cursor()
+        cursor.executemany(_postgres_sql(sql), args)
+        return cursor
+
+    def execute_script(self, sql):
+        for statement in (part.strip() for part in sql.split(";")):
+            if statement:
+                self._con.execute(statement)
+
+    def commit(self):
+        self._con.commit()
+
+    def rollback(self):
+        self._con.rollback()
+
+    def close(self):
+        self._con.close()
+
+
+def verbinden(pfad=None):
+    if POSTGRESQL and pfad is None:
+        return PostgresConnection()
+    return _sqlite_verbinden(pfad)
 
 
 def get_db():
@@ -409,6 +475,8 @@ def close_db(_exc=None):
 
 
 def init_db():
+    if POSTGRESQL:
+        return _init_postgres()
     os.makedirs(DATA_DIR, exist_ok=True)
     con = verbinden()
     version = con.execute("PRAGMA user_version").fetchone()[0]
@@ -427,11 +495,48 @@ def init_db():
     con.close()
 
 
+def _init_postgres():
+    """Führt die Schemafolge transaktional und gegen parallele Release-Jobs geschützt aus."""
+    con = verbinden()
+    try:
+        con.execute("SELECT pg_advisory_lock(hashtext('immobilienverwalter-schema'))")
+        con.execute("CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL)")
+        con.execute("INSERT INTO schema_version (version) SELECT 0 WHERE NOT EXISTS (SELECT 1 FROM schema_version)")
+        con.commit()
+        version = con.execute("SELECT version FROM schema_version").fetchone()["version"]
+        for i, sql in enumerate(MIGRATIONEN[version:], start=version + 1):
+            try:
+                con.execute_script(_postgres_migration_sql(sql))
+                if i == 1:
+                    con.execute("CREATE UNIQUE INDEX benutzer_benutzername_lower_uq ON benutzer (LOWER(benutzername))")
+                    for n, k in enumerate(STANDARD_KOSTENARTEN):
+                        con.execute("INSERT INTO kostenart (name, betrkv_nr, umlagefaehig, schluessel, sortierung) "
+                                    "VALUES (?, ?, ?, ?, ?)", (*k, n * 10))
+                if i == 12 and not con.execute("SELECT 1 FROM kostenart WHERE ruecklage = 1").fetchone():
+                    con.execute("INSERT INTO kostenart (name, umlagefaehig, schluessel, sortierung, ruecklage) "
+                                "VALUES ('Zuführung Erhaltungsrücklage', 0, 'mea', "
+                                "(SELECT COALESCE(MAX(sortierung), 0) + 10 FROM kostenart), 1)")
+                con.execute("UPDATE schema_version SET version = ?", (i,))
+                con.commit()
+            except Exception:
+                con.rollback()
+                raise
+    finally:
+        try:
+            con.execute("SELECT pg_advisory_unlock(hashtext('immobilienverwalter-schema'))")
+            con.commit()
+        finally:
+            con.close()
+
+
 def schema_version(con=None):
-    """Gibt die installierte SQLite-Schemaversion zurück."""
+    """Gibt die installierte Schemaversion des aktiven Backends zurück."""
     own = con is None
     con = con or verbinden()
     try:
+        if POSTGRESQL and own:
+            row = con.execute("SELECT version FROM schema_version").fetchone()
+            return row["version"] if row else 0
         return con.execute("PRAGMA user_version").fetchone()[0]
     finally:
         if own:
@@ -440,6 +545,27 @@ def schema_version(con=None):
 
 def assert_schema_current():
     """Readiness-Prüfung ohne Seiteneffekt; Migrationen werden hier nie ausgeführt."""
-    version = get_db().execute("PRAGMA user_version").fetchone()[0]
+    if POSTGRESQL:
+        result = get_db().execute("SELECT version FROM schema_version").fetchone()
+        version = result["version"] if result else 0
+    else:
+        version = get_db().execute("PRAGMA user_version").fetchone()[0]
     if version != len(MIGRATIONEN):
         raise RuntimeError(f"Datenbankschema {version}, erwartet {len(MIGRATIONEN)}; zuerst Migration ausführen")
+
+
+ID_TABLES = {"benutzer", "kostenart", "immobilie", "wohnung", "zaehler", "zaehlerstand", "mietverhaeltnis",
+             "mieter_person", "kosten", "dokument", "ablage", "buchung", "konto", "kontostand", "dauerauftrag",
+             "vertrag"}
+
+
+def execute_write(con, sql, args=()):
+    """Schreibzugriff mit portabler Rückgabe einer generierten numerischen ID."""
+    if not POSTGRESQL:
+        return con.execute(sql, args).lastrowid
+    match = re.match(r"\s*INSERT\s+INTO\s+([\w]+)\b", sql, flags=re.IGNORECASE)
+    if match and match.group(1).lower() in ID_TABLES:
+        result = con.execute(sql.rstrip().rstrip(";") + " RETURNING id", args).fetchone()
+        return result["id"]
+    con.execute(sql, args)
+    return None

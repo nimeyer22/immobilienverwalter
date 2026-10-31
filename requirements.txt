@@ -4,3 +4,4 @@ weasyprint==70.0
 pypdf==6.21.4
 segno==1.6.1
 pillow==13.0.0
+psycopg[binary]==3.3.2

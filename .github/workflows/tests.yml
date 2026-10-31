@@ -9,6 +9,20 @@ on:
 jobs:
   tests:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: immobilienverwalter
+          POSTGRES_PASSWORD: testpasswort
+          POSTGRES_DB: immobilienverwalter
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U immobilienverwalter -d immobilienverwalter"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
 
@@ -19,6 +33,20 @@ jobs:
         run: >
           docker run --rm -u 0 -v "$PWD:/t" -w /t immobilienverwalter
           sh -c "pip install -q pytest && python -m pytest -q tests -p no:cacheprovider"
+
+      - name: PostgreSQL-Schema migrieren
+        run: >
+          docker run --rm --network host
+          -e DATABASE_URL=postgresql://immobilienverwalter:testpasswort@127.0.0.1:5432/immobilienverwalter
+          immobilienverwalter python manage.py migrate
+
+      - name: PostgreSQL-Anwendungszugriffe testen
+        run: >
+          docker run --rm --network host -u 0 -v "$PWD:/t" -w /t
+          -e DATABASE_URL=postgresql://immobilienverwalter:testpasswort@127.0.0.1:5432/immobilienverwalter
+          -e POSTGRES_TEST_URL=postgresql://immobilienverwalter:testpasswort@127.0.0.1:5432/immobilienverwalter
+          -e SECRET_KEY=ci-test-secret immobilienverwalter
+          sh -c "pip install -q pytest && python -m pytest -q tests/test_postgres_integration.py -p no:cacheprovider"
 
       - name: App startet mit leerer Datenbank und meldet sich gesund
         run: |

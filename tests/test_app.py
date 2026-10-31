@@ -23,6 +23,41 @@ from main import app  # noqa: E402
 app.config["TESTING"] = True
 
 
+class _TupleCursor:
+    """Einheitliche Testansicht: sqlite3.Row und psycopg-Dicts werden zu Tupeln."""
+
+    def __init__(self, cursor):
+        self.cursor = cursor
+
+    @staticmethod
+    def _tuple(row):
+        return tuple(row.values()) if isinstance(row, dict) else tuple(row)
+
+    def fetchone(self):
+        row = self.cursor.fetchone()
+        return self._tuple(row) if row is not None else None
+
+    def fetchall(self):
+        return [self._tuple(row) for row in self.cursor.fetchall()]
+
+    def __iter__(self):
+        return (self._tuple(row) for row in self.cursor)
+
+
+class _TestConnection:
+    def __init__(self):
+        self.connection = db.verbinden()
+
+    def execute(self, sql, args=()):
+        return _TupleCursor(self.connection.execute(sql, args))
+
+    def executemany(self, sql, args):
+        return self.connection.executemany(sql, args)
+
+    def commit(self):
+        self.connection.commit()
+
+
 def pdf_datei(name="beleg.pdf"):
     w = PdfWriter()
     w.add_blank_page(width=595, height=842)
@@ -200,8 +235,7 @@ def test_gesamter_ablauf():
     assert "inline" in r.headers.get("Content-Disposition", "inline")
 
     # Belege und Buchungen: mehrere Belege je Kostenart, Einnahmen mindern, Rücklage wird nicht umgelegt
-    import sqlite3
-    dbcon = sqlite3.connect(os.path.join(TMP, "data", "nebenkosten.sqlite"))
+    dbcon = _TestConnection()
 
     def kosten(kostenart_id):
         r = dbcon.execute("SELECT betrag FROM kosten WHERE immobilie_id = 1 AND jahr = 2025 AND wohnung_id IS NULL "

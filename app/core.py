@@ -73,9 +73,13 @@ def row(sql, args=()):
 
 def exe(sql, args=()):
     con = db.get_db()
-    cur = con.execute(sql, args)
-    con.commit()
-    return cur.lastrowid
+    try:
+        result = db.execute_write(con, sql, args)
+        con.commit()
+        return result
+    except Exception:
+        con.rollback()
+        raise
 
 
 def einstellung(schluessel, standard=""):
